@@ -14,8 +14,11 @@ use base58::ToBase58;
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::time::Instant;
 use std::fs;
-use num_bigint::BigUint;
-use num_traits::{FromPrimitive};
+use std::env;
+use std::path::Path;
+use num_bigint::{BigUint, RandBigInt};
+use num_traits::{Zero, One};
+use rand::thread_rng;
 
 const BATCH_SIZE: usize = 10_000_000;
 const ADDR_FILE: &str = "resources/addresses/Bitcoin_addresses_sorted.txt";
@@ -33,11 +36,54 @@ fn private_key_to_wif(key: &[u8; 32], compressed: bool) -> String {
     data.to_base58()
 }
 
+fn find_existing_chunk_id() -> Option<BigUint> {
+    let path = Path::new(CHUNK_FOLDER);
+    if path.exists() {
+        for entry in fs::read_dir(path).ok()? {
+            let entry = entry.ok()?;
+            let filename = entry.file_name().to_string_lossy().into_owned();
+            if filename.starts_with("chunk_") && filename.ends_with(".json") {
+                let id_str = filename
+                    .strip_prefix("chunk_")?
+                    .strip_suffix(".json")?
+                    .trim_start_matches('0');
+                if !id_str.is_empty() {
+                    return BigUint::parse_bytes(id_str.as_bytes(), 10);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn random_chunk_id(chunk_size: &BigUint) -> BigUint {
+    let max_key = BigUint::parse_bytes(
+        b"fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140",
+        16,
+    ).unwrap();
+    let mut rng = thread_rng();
+    let max_chunks = &max_key / chunk_size;
+    rng.gen_biguint_below(&max_chunks)
+}
+
 fn main() {
-    let chunk_id = BigUint::from_u64(0).unwrap(); // Replace with dynamic input if needed
+    let args: Vec<String> = env::args().collect();
     let chunk_size = BigUint::parse_bytes(CHUNK_SIZE.as_bytes(), 10).unwrap();
 
+    // Determine chunk_id
+    let chunk_id: BigUint = if args.len() > 1 {
+        BigUint::parse_bytes(args[1].as_bytes(), 10).expect("Invalid chunk_id argument")
+    } else if let Some(existing) = find_existing_chunk_id() {
+        println!("🧠 Using existing chunk ID from disk: {}", existing);
+        existing
+    } else {
+        let random = random_chunk_id(&chunk_size);
+        println!("🎲 No chunk ID provided/found. Generated random chunk ID: {}", random);
+        random
+    };
+
     let chunk_path = format!("{}/chunk_{:05}.json", CHUNK_FOLDER, chunk_id);
+
     println!("\n🚀 Starting BTC Key Matcher");
     println!("📦 Loading chunk: {}", chunk_path);
 
