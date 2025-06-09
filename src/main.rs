@@ -1,4 +1,3 @@
-// src/main.rs
 mod chunk;
 mod keygen;
 mod address;
@@ -15,10 +14,13 @@ use base58::ToBase58;
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::time::Instant;
 use std::fs;
+use num_bigint::BigUint;
+use num_traits::{FromPrimitive};
 
 const BATCH_SIZE: usize = 10_000_000;
-const PROGRESS_FILE: &str = "resources/tests/test_chunk_found.json";
-const ADDR_FILE: &str = "addresses/Bitcoin_addresses_sorted.txt";
+const ADDR_FILE: &str = "resources/addresses/Bitcoin_addresses_sorted.txt";
+const CHUNK_FOLDER: &str = "resources/chunks";
+const CHUNK_SIZE: &str = "10000000000"; // As string to convert to BigUint easily
 
 fn private_key_to_wif(key: &[u8; 32], compressed: bool) -> String {
     let mut data = vec![0x80]; // Mainnet prefix
@@ -32,20 +34,44 @@ fn private_key_to_wif(key: &[u8; 32], compressed: bool) -> String {
 }
 
 fn main() {
-    let mut meta = ChunkMetadata::load(PROGRESS_FILE);
+    let chunk_id = BigUint::from_u64(0).unwrap(); // Replace with dynamic input if needed
+    let chunk_size = BigUint::parse_bytes(CHUNK_SIZE.as_bytes(), 10).unwrap();
+
+    let chunk_path = format!("{}/chunk_{:05}.json", CHUNK_FOLDER, chunk_id);
+    println!("\n🚀 Starting BTC Key Matcher");
+    println!("📦 Loading chunk: {}", chunk_path);
+
+    let mut meta = ChunkMetadata::load_or_create(&chunk_id, &chunk_size, CHUNK_FOLDER);
+    println!("➡️  Chunk ID: {}", meta.chunk_id);
+    println!("   Start Key: {}", meta.start_hex);
+    println!("   End Key:   {}", meta.end_hex);
+    println!("   Last Key:  {}", meta.last_processed_hex);
+
+    println!("📁 Loading address database from: {}", ADDR_FILE);
     let sorted_addresses = Arc::new(load_sorted_addresses(ADDR_FILE));
+    println!("✅ Loaded {} addresses\n", sorted_addresses.len());
 
     let mut generator = HexKeyGenerator::new(
         &meta.last_processed_hex,
         &meta.end_hex,
     );
 
-    let start = Instant::now();
+    let start_chunk_time = Instant::now();
+    let mut batch_counter = 0;
+
     loop {
         let batch = generator.next_batch(BATCH_SIZE);
         if batch.is_empty() {
             break;
         }
+
+        let batch_start_hex = hex::encode(batch[0]);
+        batch_counter += 1;
+        println!(
+            "🔁 Processing batch #{:03} | Start Key: {}",
+            batch_counter, batch_start_hex
+        );
+        let batch_start = Instant::now();
 
         let found = Arc::new(AtomicBool::new(false));
         let addresses = Arc::clone(&sorted_addresses);
@@ -66,14 +92,10 @@ fn main() {
                         3 => "Bech32 (P2WPKH)",
                         _ => "Unknown",
                     };
-                    println!("MATCH FOUND: {} -> {}", hex_key, addr);
+                    println!("🎯 MATCH FOUND: {} -> {}", hex_key, addr);
                     let csv_data = format!(
                         "hex_key;matched_address;wif_uncompressed;wif_compressed;format\n{};{};{};{};{}\n",
-                        hex_key,
-                        addr,
-                        wif_uncompressed,
-                        wif_compressed,
-                        format
+                        hex_key, addr, wif_uncompressed, wif_compressed, format
                     );
                     fs::write("match_found.csv", csv_data).unwrap();
                     found.store(true, Ordering::Relaxed);
@@ -83,9 +105,14 @@ fn main() {
         });
 
         meta.last_processed_hex = generator.last_key();
-        meta.save(PROGRESS_FILE);
-        println!("Batch completed. Last processed key: {}", meta.last_processed_hex);
+        meta.save(&chunk_path);
+
+        let elapsed = batch_start.elapsed();
+        println!(
+            "✅ Batch #{:03} completed in {:.2?}. Last key: {}\n",
+            batch_counter, elapsed, meta.last_processed_hex
+        );
     }
 
-    println!("Finished chunk in {:?}", start.elapsed());
+    println!("🏁 Finished chunk {} in {:.2?}", chunk_id, start_chunk_time.elapsed());
 }

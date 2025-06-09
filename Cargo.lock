@@ -43,6 +43,7 @@ dependencies = [
  "bech32",
  "hex",
  "num-bigint",
+ "num-traits",
  "rand",
  "rayon",
  "ripemd",

@@ -15,6 +15,7 @@ ripemd = "0.1"
 bech32 = "0.9"
 rand = "0.8"
 secp256k1 = { version = "0.28", features = ["rand"] }
+num-traits = "0.2"
 
 [dev-dependencies]
 tempfile = "3"
