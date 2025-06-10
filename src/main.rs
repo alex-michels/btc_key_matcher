@@ -12,12 +12,9 @@ use search::{load_sorted_addresses, binary_search};
 use rayon::prelude::*;
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::time::Instant;
-use std::fs::{self, create_dir_all};
+use std::fs::{self};
 use std::env;
-use std::path::Path;
-use num_bigint::{BigUint, RandBigInt};
-use num_traits::One;
-use rand::thread_rng;
+use num_bigint::{BigUint};
 
 const BATCH_SIZE: usize = 10_000_000;
 const ADDR_FILE: &str = "resources/addresses/Bitcoin_addresses_sorted.txt";
@@ -47,52 +44,21 @@ fn main() {
         CHUNK_FOLDER.to_string()
     };
 
-    let chunk_id: BigUint = if let Some(id) = cli_chunk_id {
-        id
-    } else if let Some(existing) = find_existing_chunk_id(&base_folder) {
-        println!("🧠 Using existing chunk ID from disk: {}", existing);
-        existing
-    } else if let Some(range) = &puzzle_range {
-        let max_chunks = (&range.end - &range.start) / &chunk_size;
-        let mut rng = thread_rng();
-        let id = rng.gen_biguint_below(&max_chunks);
-        println!("🎲 Generated random chunk ID: {}", id);
-        id
-    } else {
-        let random = random_chunk_id(&chunk_size);
-        println!("🎲 No chunk ID provided/found. Generated random chunk ID: {}", random);
-        random
-    };
+    let chunk_id: BigUint = cli_chunk_id
+        .or_else(|| find_existing_chunk_id(&base_folder))
+        .or_else(|| {
+            if let Some(range) = &puzzle_range {
+                Some(chunk::random_chunk_id_within_range(&chunk_size, range))
+            } else {
+                Some(random_chunk_id(&chunk_size))
+            }
+        })
+        .expect("Unable to determine chunk ID");
 
     let chunk_filename = format_chunk_filename(&chunk_id);
     let chunk_path = format!("{}/{}", base_folder, chunk_filename);
 
-    let mut meta = if Path::new(&chunk_path).exists() {
-        ChunkMetadata::load(&chunk_path)
-    } else {
-        let (start_hex, end_hex) = if let Some(range) = &puzzle_range {
-            let base = &range.start + (&chunk_id * &chunk_size);
-            let start = &base + BigUint::one();
-            let end = &start + &chunk_size - BigUint::one();
-            (
-                format!("{:064x}", start),
-                format!("{:064x}", end),
-            )
-        } else {
-            chunk::calculate_chunk_range(&chunk_id, &chunk_size)
-        };
-
-        let meta = ChunkMetadata {
-            chunk_id: format!("{:05}", chunk_id),
-            start_hex: start_hex.clone(),
-            end_hex: end_hex.clone(),
-            last_processed_hex: start_hex.clone(),
-        };
-
-        create_dir_all(&base_folder).unwrap();
-        meta.save(&chunk_path);
-        meta
-    };
+    let mut meta = ChunkMetadata::load_or_create(&chunk_id, &chunk_size, &base_folder, puzzle_range);
 
     println!("\n🚀 Starting BTC Key Matcher");
     println!("➡️  Chunk ID: {}", meta.chunk_id);
