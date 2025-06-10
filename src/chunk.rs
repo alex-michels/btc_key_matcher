@@ -57,3 +57,10 @@ pub fn calculate_chunk_range(chunk_id: &BigUint, chunk_size: &BigUint) -> (Strin
         format!("{:064x}", end),
     )
 }
+
+use std::fmt::Write;
+
+/// Format chunk file name for arbitrary BigUint values
+pub fn format_chunk_filename(chunk_id: &BigUint) -> String {
+    format!("chunk_{}.json", chunk_id.to_str_radix(10))
+}
