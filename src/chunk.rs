@@ -1,9 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::fs::{File, create_dir_all};
 use std::io::{BufReader, BufWriter};
-use num_bigint::BigUint;
 use num_traits::identities::One;
 use std::path::Path;
+use std::fs;
+use rand::thread_rng;
+use num_bigint::{BigUint, RandBigInt};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct ChunkMetadata {
@@ -63,4 +65,34 @@ use std::fmt::Write;
 /// Format chunk file name for arbitrary BigUint values
 pub fn format_chunk_filename(chunk_id: &BigUint) -> String {
     format!("chunk_{}.json", chunk_id.to_str_radix(10))
+}
+
+pub fn find_existing_chunk_id(folder: &str) -> Option<BigUint> {
+    let path = Path::new(folder);
+    if path.exists() {
+        for entry in fs::read_dir(path).ok()? {
+            let entry = entry.ok()?;
+            let filename = entry.file_name().to_string_lossy().into_owned();
+            if filename.starts_with("chunk_") && filename.ends_with(".json") {
+                let id_str = filename
+                    .strip_prefix("chunk_")?
+                    .strip_suffix(".json")?
+                    .trim_start_matches('0');
+                if !id_str.is_empty() {
+                    return BigUint::parse_bytes(id_str.as_bytes(), 10);
+                }
+            }
+        }
+    }
+    None
+}
+
+pub fn random_chunk_id(chunk_size: &BigUint) -> BigUint {
+    let max_key = BigUint::parse_bytes(
+        b"fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140",
+        16,
+    ).unwrap();
+    let mut rng = thread_rng();
+    let max_chunks = &max_key / chunk_size;
+    rng.gen_biguint_below(&max_chunks)
 }

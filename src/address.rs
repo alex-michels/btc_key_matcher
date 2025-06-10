@@ -55,3 +55,14 @@ pub fn derive_addresses(raw_key: &[u8; 32]) -> Vec<String> {
         to_bech32(&public_key.serialize()),
     ]
 }
+
+pub fn private_key_to_wif(key: &[u8; 32], compressed: bool) -> String {
+    let mut data = vec![0x80]; // Mainnet prefix
+    data.extend_from_slice(key);
+    if compressed {
+        data.push(0x01);
+    }
+    let checksum = &Sha256::digest(&Sha256::digest(&data))[..4];
+    data.extend(checksum);
+    data.to_base58()
+}

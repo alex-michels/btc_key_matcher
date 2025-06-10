@@ -4,14 +4,12 @@ mod address;
 mod search;
 mod puzzles;
 
-use chunk::{ChunkMetadata, format_chunk_filename};
+use chunk::{ChunkMetadata, format_chunk_filename, find_existing_chunk_id, random_chunk_id};
 use keygen::HexKeyGenerator;
-use address::derive_addresses;
+use address::{derive_addresses, private_key_to_wif};
 use search::{load_sorted_addresses, binary_search};
 
 use rayon::prelude::*;
-use sha2::{Digest, Sha256};
-use base58::ToBase58;
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::time::Instant;
 use std::fs::{self, create_dir_all};
@@ -25,47 +23,6 @@ const BATCH_SIZE: usize = 10_000_000;
 const ADDR_FILE: &str = "resources/addresses/Bitcoin_addresses_sorted.txt";
 const CHUNK_FOLDER: &str = "resources/chunks";
 const CHUNK_SIZE: &str = "10000000000";
-
-fn private_key_to_wif(key: &[u8; 32], compressed: bool) -> String {
-    let mut data = vec![0x80];
-    data.extend_from_slice(key);
-    if compressed {
-        data.push(0x01);
-    }
-    let checksum = &Sha256::digest(&Sha256::digest(&data))[..4];
-    data.extend(checksum);
-    data.to_base58()
-}
-
-fn find_existing_chunk_id(folder: &str) -> Option<BigUint> {
-    let path = Path::new(folder);
-    if path.exists() {
-        for entry in fs::read_dir(path).ok()? {
-            let entry = entry.ok()?;
-            let filename = entry.file_name().to_string_lossy().into_owned();
-            if filename.starts_with("chunk_") && filename.ends_with(".json") {
-                let id_str = filename
-                    .strip_prefix("chunk_")?
-                    .strip_suffix(".json")?
-                    .trim_start_matches('0');
-                if !id_str.is_empty() {
-                    return BigUint::parse_bytes(id_str.as_bytes(), 10);
-                }
-            }
-        }
-    }
-    None
-}
-
-fn random_chunk_id(chunk_size: &BigUint) -> BigUint {
-    let max_key = BigUint::parse_bytes(
-        b"fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140",
-        16,
-    ).unwrap();
-    let mut rng = thread_rng();
-    let max_chunks = &max_key / chunk_size;
-    rng.gen_biguint_below(&max_chunks)
-}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
