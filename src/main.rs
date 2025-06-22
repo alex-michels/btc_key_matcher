@@ -3,18 +3,21 @@ mod keygen;
 mod address;
 mod search;
 mod puzzles;
+mod chunk_manager;
 
-use chunk::{ChunkMetadata, format_chunk_filename, find_existing_chunk_id, random_chunk_id};
+use chunk::{ChunkMetadata, ChunkStatus};
 use keygen::HexKeyGenerator;
 use address::{derive_addresses, private_key_to_wif};
 use search::{load_sorted_addresses, binary_search};
+use chunk_manager::acquire_chunk;
 
 use rayon::prelude::*;
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::time::Instant;
 use std::fs::{self};
 use std::env;
-use num_bigint::{BigUint};
+use num_bigint::BigUint;
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}, Mutex};
+use ctrlc;
 
 const BATCH_SIZE: usize = 10_000_000;
 const ADDR_FILE: &str = "resources/addresses/Bitcoin_addresses_sorted.txt";
@@ -44,21 +47,22 @@ fn main() {
         CHUNK_FOLDER.to_string()
     };
 
-    let chunk_id: BigUint = cli_chunk_id
-        .or_else(|| find_existing_chunk_id(&base_folder))
-        .or_else(|| {
-            if let Some(range) = &puzzle_range {
-                Some(chunk::random_chunk_id_within_range(&chunk_size, range))
-            } else {
-                Some(random_chunk_id(&chunk_size))
-            }
-        })
-        .expect("Unable to determine chunk ID");
+    let (mut meta, chunk_id) = acquire_chunk(&base_folder, &chunk_size, cli_chunk_id, puzzle_range.as_ref());
 
-    let chunk_filename = format_chunk_filename(&chunk_id);
-    let chunk_path = format!("{}/{}", base_folder, chunk_filename);
-
-    let mut meta = ChunkMetadata::load_or_create(&chunk_id, &chunk_size, &base_folder, puzzle_range);
+    // Set up Ctrl+C handler
+    let meta_arc = Arc::new(Mutex::new(meta.clone()));
+    let base_folder_clone = base_folder.clone();
+    let chunk_id_clone = chunk_id.clone();
+    {
+        let meta_ctrlc = Arc::clone(&meta_arc);
+        ctrlc::set_handler(move || {
+            let mut meta = meta_ctrlc.lock().unwrap();
+            meta.status = ChunkStatus::Pending;
+            meta.save(&ChunkMetadata::path(&chunk_id_clone, &base_folder_clone));
+            println!("\n🛑 Interrupted. Chunk status reset to pending.");
+            std::process::exit(0);
+        }).expect("Error setting Ctrl+C handler");
+    }
 
     println!("\n🚀 Starting BTC Key Matcher");
     println!("➡️  Chunk ID: {}", meta.chunk_id);
@@ -122,14 +126,20 @@ fn main() {
         });
 
         meta.last_processed_hex = generator.last_key();
-        meta.save(&chunk_path);
+        meta.save(&ChunkMetadata::path(&chunk_id, &base_folder));
 
         let elapsed = batch_start.elapsed();
         println!(
             "✅ Batch #{:03} completed in {:.2?}. Last key: {}\n",
             batch_counter, elapsed, meta.last_processed_hex
         );
+
+        let mut shared = meta_arc.lock().unwrap();
+        *shared = meta.clone(); // update shared state
     }
+
+    meta.status = ChunkStatus::Finished;
+    meta.save(&ChunkMetadata::path(&chunk_id, &base_folder));
 
     println!("🏁 Finished chunk {} in {:.2?}", chunk_id, start_chunk_time.elapsed());
 }
