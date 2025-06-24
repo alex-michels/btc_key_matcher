@@ -22,7 +22,7 @@ use ctrlc;
 const BATCH_SIZE: usize = 1_000_000;
 const ADDR_FILE: &str = "resources/addresses/Bitcoin_addresses_sorted.txt";
 const CHUNK_FOLDER: &str = "resources/chunks";
-const CHUNK_SIZE: &str = "10000000000";
+const CHUNK_SIZE: &str = "100_000_000_000";
 
 fn main() {
     let args: Vec<String> = env::args().collect();
