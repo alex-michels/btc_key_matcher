@@ -68,7 +68,7 @@ impl ChunkMetadata {
             start_hex: start_hex.clone(),
             end_hex: end_hex.clone(),
             last_processed_hex: start_hex,
-            status: ChunkStatus::Pending,
+            status: ChunkStatus::Processing,
         };
 
         create_dir_all(base_path).expect("Failed to create chunk folder");
