@@ -19,7 +19,7 @@ use num_bigint::BigUint;
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}, Mutex};
 use ctrlc;
 
-const BATCH_SIZE: usize = 2_000_000;
+const BATCH_SIZE: usize = 1_000_000;
 const ADDR_FILE: &str = "resources/addresses/Bitcoin_addresses_sorted.txt";
 const CHUNK_FOLDER: &str = "resources/chunks";
 const CHUNK_SIZE: &str = "10000000000";
