@@ -1,4 +1,4 @@
-use btc_key_matcher::chunk::{calculate_chunk_range, ChunkMetadata};
+use btc_key_matcher::chunk::{calculate_chunk_range, ChunkMetadata, ChunkStatus};
 use num_bigint::BigUint;
 use num_traits::{One, FromPrimitive}; // <== Use FromPrimitive instead of manual from()
 use std::fs;
@@ -44,6 +44,7 @@ fn test_chunk_metadata_file_persistence() {
         start_hex: "0f".repeat(32),
         end_hex: "ff".repeat(32),
         last_processed_hex: "1f".repeat(32),
+        status: ChunkStatus::Processing,
     };
 
     meta.save(path);
