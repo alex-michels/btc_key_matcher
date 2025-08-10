@@ -1,11 +1,11 @@
+use crate::puzzles::PuzzleRange;
+use num_bigint::{BigUint, RandBigInt};
+use num_traits::One;
+use rand::thread_rng;
 use serde::{Deserialize, Serialize};
 use std::fs::{File, create_dir_all};
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
-use num_bigint::{BigUint, RandBigInt};
-use num_traits::One;
-use rand::thread_rng;
-use crate::puzzles::PuzzleRange;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "lowercase")]
@@ -93,7 +93,8 @@ pub fn random_chunk_id(chunk_size: &BigUint) -> BigUint {
     let max_key = BigUint::parse_bytes(
         b"fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140",
         16,
-    ).unwrap();
+    )
+    .unwrap();
     let mut rng = thread_rng();
     let max_chunks = &max_key / chunk_size;
     rng.gen_biguint_below(&max_chunks)

@@ -26,7 +26,6 @@ impl HexKeyGenerator {
         batch
     }
 
-
     pub fn last_key(&self) -> String {
         hex::encode(self.current)
     }

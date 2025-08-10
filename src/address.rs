@@ -1,8 +1,8 @@
-use secp256k1::{Secp256k1, SecretKey, PublicKey};
-use sha2::{Sha256, Digest};
-use ripemd::{Ripemd160};
-use bech32::{u5, ToBase32, Variant, encode};
 use base58::ToBase58;
+use bech32::{ToBase32, Variant, encode, u5};
+use ripemd::Ripemd160;
+use secp256k1::{PublicKey, Secp256k1, SecretKey};
+use sha2::{Digest, Sha256};
 
 fn sha256_digest(data: &[u8]) -> Vec<u8> {
     Sha256::digest(data).to_vec()

@@ -1,23 +1,26 @@
-mod chunk;
-mod keygen;
 mod address;
-mod search;
-mod puzzles;
+mod chunk;
 mod chunk_manager;
+mod keygen;
+mod puzzles;
+mod search;
 
-use chunk::{ChunkMetadata, ChunkStatus};
-use keygen::HexKeyGenerator;
 use address::{derive_addresses, private_key_to_wif};
-use search::{load_sorted_addresses, binary_search};
+use chunk::{ChunkMetadata, ChunkStatus};
 use chunk_manager::acquire_chunk;
+use keygen::HexKeyGenerator;
+use search::{binary_search, load_sorted_addresses};
 
-use rayon::prelude::*;
-use std::time::Instant;
-use std::fs::{self};
-use std::env;
-use num_bigint::BigUint;
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}, Mutex};
 use ctrlc;
+use num_bigint::BigUint;
+use rayon::prelude::*;
+use std::env;
+use std::fs::{self};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
+use std::time::Instant;
 
 const BATCH_SIZE: usize = 5_000_000;
 const ADDR_FILE: &str = "resources/addresses/Bitcoin_addresses_sorted.txt";
@@ -28,18 +31,19 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let chunk_size = BigUint::parse_bytes(CHUNK_SIZE.as_bytes(), 10).unwrap();
 
-    let puzzle_id = args.iter()
+    let puzzle_id = args
+        .iter()
         .position(|arg| arg == "--puzzle-id")
         .and_then(|i| args.get(i + 1))
         .and_then(|id| id.parse::<u32>().ok());
 
-    let cli_chunk_id = args.iter()
+    let cli_chunk_id = args
+        .iter()
         .position(|arg| arg == "--chunk-id")
         .and_then(|i| args.get(i + 1))
         .and_then(|id| BigUint::parse_bytes(id.as_bytes(), 10));
 
-    let puzzle_range = puzzle_id
-        .and_then(|pid| puzzles::get_puzzle_ranges().get(&pid).cloned());
+    let puzzle_range = puzzle_id.and_then(|pid| puzzles::get_puzzle_ranges().get(&pid).cloned());
 
     let base_folder = if let Some(pid) = puzzle_id {
         format!("{}/puzzle_{:03}", CHUNK_FOLDER, pid)
@@ -47,7 +51,12 @@ fn main() {
         CHUNK_FOLDER.to_string()
     };
 
-    let (mut meta, chunk_id) = acquire_chunk(&base_folder, &chunk_size, cli_chunk_id, puzzle_range.as_ref());
+    let (mut meta, chunk_id) = acquire_chunk(
+        &base_folder,
+        &chunk_size,
+        cli_chunk_id,
+        puzzle_range.as_ref(),
+    );
 
     // Set up Ctrl+C handler
     let meta_arc = Arc::new(Mutex::new(meta.clone()));
@@ -61,7 +70,8 @@ fn main() {
             meta.save(&ChunkMetadata::path(&chunk_id_clone, &base_folder_clone));
             println!("\n🛑 Interrupted. Chunk status reset to pending.");
             std::process::exit(0);
-        }).expect("Error setting Ctrl+C handler");
+        })
+        .expect("Error setting Ctrl+C handler");
     }
 
     println!("\n🚀 Starting BTC Key Matcher");
@@ -141,5 +151,9 @@ fn main() {
     meta.status = ChunkStatus::Finished;
     meta.save(&ChunkMetadata::path(&chunk_id, &base_folder));
 
-    println!("🏁 Finished chunk {} in {:.2?}", chunk_id, start_chunk_time.elapsed());
+    println!(
+        "🏁 Finished chunk {} in {:.2?}",
+        chunk_id,
+        start_chunk_time.elapsed()
+    );
 }
